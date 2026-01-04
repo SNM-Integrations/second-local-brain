@@ -17,6 +17,15 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+  PaginationEllipsis,
+} from "@/components/ui/pagination";
 import { Plus, Search, MoreHorizontal, Mail, Phone, Edit, Trash2, Building2 } from "lucide-react";
 import { ContactDialog } from "./ContactDialog";
 import { supabase } from "@/integrations/supabase/client";
@@ -42,6 +51,8 @@ const relationshipColors: Record<Contact["relationship"], string> = {
   network: "bg-purple-500/10 text-purple-500 border-purple-500/20",
 };
 
+const CONTACTS_PER_PAGE = 10;
+
 interface ContactsListProps {
   onNavigateToCompany?: (companyId: string) => void;
   selectedContactId?: string | null;
@@ -59,6 +70,7 @@ export function ContactsList({
   const [isLoading, setIsLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingContact, setEditingContact] = useState<Contact | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
 
   const loadContacts = async () => {
     setIsLoading(true);
@@ -66,7 +78,7 @@ export function ContactsList({
       .from("contacts")
       .select("*")
       .eq("contact_type", "contact")
-      .order("name", { ascending: true });
+      .order("created_at", { ascending: false });
 
     // Filter by context
     if (context.mode === "personal") {
@@ -126,6 +138,32 @@ export function ContactsList({
       contact.email.toLowerCase().includes(search.toLowerCase()) ||
       contact.company.toLowerCase().includes(search.toLowerCase())
   );
+
+  // Pagination logic
+  const totalPages = Math.ceil(filteredContacts.length / CONTACTS_PER_PAGE);
+  const startIndex = (currentPage - 1) * CONTACTS_PER_PAGE;
+  const paginatedContacts = filteredContacts.slice(startIndex, startIndex + CONTACTS_PER_PAGE);
+
+  // Reset to page 1 when search changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search]);
+
+  const getPageNumbers = () => {
+    const pages: (number | 'ellipsis')[] = [];
+    if (totalPages <= 5) {
+      for (let i = 1; i <= totalPages; i++) pages.push(i);
+    } else {
+      pages.push(1);
+      if (currentPage > 3) pages.push('ellipsis');
+      for (let i = Math.max(2, currentPage - 1); i <= Math.min(totalPages - 1, currentPage + 1); i++) {
+        pages.push(i);
+      }
+      if (currentPage < totalPages - 2) pages.push('ellipsis');
+      pages.push(totalPages);
+    }
+    return pages;
+  };
 
   const handleEdit = (contact: Contact) => {
     setEditingContact(contact);
@@ -199,14 +237,14 @@ export function ContactsList({
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filteredContacts.length === 0 ? (
+            {paginatedContacts.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
                   {search ? "No contacts found" : "No contacts yet. Add one!"}
                 </TableCell>
               </TableRow>
             ) : (
-              filteredContacts.map((contact) => (
+              paginatedContacts.map((contact) => (
                 <TableRow 
                   key={contact.id} 
                   className="cursor-pointer hover:bg-muted/50"
@@ -286,6 +324,46 @@ export function ContactsList({
           </TableBody>
         </Table>
       </div>
+
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between">
+          <p className="text-sm text-muted-foreground">
+            Showing {startIndex + 1}-{Math.min(startIndex + CONTACTS_PER_PAGE, filteredContacts.length)} of {filteredContacts.length} contacts
+          </p>
+          <Pagination>
+            <PaginationContent>
+              <PaginationItem>
+                <PaginationPrevious 
+                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                  className={currentPage === 1 ? "pointer-events-none opacity-50" : "cursor-pointer"}
+                />
+              </PaginationItem>
+              {getPageNumbers().map((page, idx) => (
+                <PaginationItem key={idx}>
+                  {page === 'ellipsis' ? (
+                    <PaginationEllipsis />
+                  ) : (
+                    <PaginationLink
+                      onClick={() => setCurrentPage(page)}
+                      isActive={currentPage === page}
+                      className="cursor-pointer"
+                    >
+                      {page}
+                    </PaginationLink>
+                  )}
+                </PaginationItem>
+              ))}
+              <PaginationItem>
+                <PaginationNext 
+                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                  className={currentPage === totalPages ? "pointer-events-none opacity-50" : "cursor-pointer"}
+                />
+              </PaginationItem>
+            </PaginationContent>
+          </Pagination>
+        </div>
+      )}
 
       <ContactDialog
         open={dialogOpen}
