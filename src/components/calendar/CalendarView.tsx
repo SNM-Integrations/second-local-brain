@@ -158,7 +158,7 @@ export function CalendarView() {
       const afterDate = format(start, "yyyy-MM-dd");
       const beforeDate = format(end, "yyyy-MM-dd");
       
-      // Call the edge function to fetch Google Calendar events via n8n
+      // Call the edge function to fetch Google Calendar events
       const { data, error } = await supabase.functions.invoke("sync-google-calendar", {
         body: {
           after: afterDate,
@@ -168,6 +168,12 @@ export function CalendarView() {
         },
       });
 
+      // Handle "needsAuth" response - user needs to connect Google account
+      if (data?.needsAuth) {
+        toast.info("Connect your Google Calendar in Settings → Integrations to sync events");
+        return;
+      }
+
       if (error) throw error;
       
       if (data?.error) {
@@ -176,9 +182,14 @@ export function CalendarView() {
         toast.success(data?.message || `Calendar synced for ${viewMode} view`);
         await loadEvents();
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Sync error:", error);
-      toast.error("Failed to sync calendar");
+      // Check if it's a 401 auth error
+      if (error?.message?.includes("401") || error?.status === 401) {
+        toast.info("Connect your Google Calendar in Settings → Integrations to sync events");
+      } else {
+        toast.error("Failed to sync calendar");
+      }
     } finally {
       setSyncing(false);
     }
