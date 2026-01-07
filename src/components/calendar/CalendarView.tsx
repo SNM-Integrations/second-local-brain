@@ -168,13 +168,34 @@ export function CalendarView() {
         },
       });
 
-      // Handle "needsAuth" response - user needs to connect Google account
+      // Handle errors from the edge function
+      if (error) {
+        // Check if it's a FunctionsHttpError with context
+        const context = (error as any)?.context;
+        if (context) {
+          try {
+            const errorBody = await context.json?.();
+            if (errorBody?.needsAuth) {
+              toast.info("Connect your Google Calendar in Settings → Integrations to sync events");
+              return;
+            }
+          } catch {
+            // Couldn't parse error context, continue with generic error handling
+          }
+        }
+        // Check if it's a 401 auth error
+        if (error.message?.includes("401") || error.message?.includes("non-2xx")) {
+          toast.info("Connect your Google Calendar in Settings → Integrations to sync events");
+          return;
+        }
+        throw error;
+      }
+
+      // Handle "needsAuth" response in data (in case edge function returns 200 with error info)
       if (data?.needsAuth) {
         toast.info("Connect your Google Calendar in Settings → Integrations to sync events");
         return;
       }
-
-      if (error) throw error;
       
       if (data?.error) {
         toast.error(data.error);
@@ -184,12 +205,7 @@ export function CalendarView() {
       }
     } catch (error: any) {
       console.error("Sync error:", error);
-      // Check if it's a 401 auth error
-      if (error?.message?.includes("401") || error?.status === 401) {
-        toast.info("Connect your Google Calendar in Settings → Integrations to sync events");
-      } else {
-        toast.error("Failed to sync calendar");
-      }
+      toast.error("Failed to sync calendar");
     } finally {
       setSyncing(false);
     }
