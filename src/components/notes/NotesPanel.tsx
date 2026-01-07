@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Plus, FileText, Search, Trash2, FolderSync } from "lucide-react";
+import { Plus, FileText, Search, Trash2, FolderSync, Folder, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { fetchNotes, deleteNote, type Note } from "@/lib/supabase-api";
 import NoteEditor from "./NoteEditor";
@@ -18,6 +18,8 @@ const NotesPanel: React.FC<NotesPanelProps> = ({ onClose }) => {
   const [selectedNote, setSelectedNote] = useState<Note | null>(null);
   const [isCreating, setIsCreating] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [folderFilter, setFolderFilter] = useState<string[] | null>(null);
+  const [breadcrumbs, setBreadcrumbs] = useState<string[]>([]);
 
   useEffect(() => {
     loadNotes();
@@ -57,12 +59,50 @@ const NotesPanel: React.FC<NotesPanelProps> = ({ onClose }) => {
     return firstLine.length > 50 ? firstLine.slice(0, 50) + '...' : firstLine || 'Untitled';
   };
 
-  const filteredNotes = search
-    ? notes.filter(
-        (n) =>
-          n.content.toLowerCase().includes(search.toLowerCase())
-      )
-    : notes;
+  const handleFolderClick = (note: Note) => {
+    if (note.folder_path && note.folder_path.length > 0) {
+      setFolderFilter(note.folder_path);
+      setBreadcrumbs(note.folder_path);
+    }
+  };
+
+  const handleBreadcrumbClick = (index: number) => {
+    if (index === -1) {
+      // Go to root
+      setFolderFilter(null);
+      setBreadcrumbs([]);
+    } else {
+      const newPath = breadcrumbs.slice(0, index + 1);
+      setFolderFilter(newPath);
+      setBreadcrumbs(newPath);
+    }
+  };
+
+  // Filter notes by folder and search
+  let filteredNotes = notes;
+  
+  if (folderFilter) {
+    // Show items in current folder
+    filteredNotes = notes.filter((n: any) => {
+      if (!n.folder_path) return false;
+      // Check if this item is in the current folder
+      if (n.folder_path.length !== folderFilter.length + 1) return false;
+      // Check if path matches
+      for (let i = 0; i < folderFilter.length; i++) {
+        if (n.folder_path[i] !== folderFilter[i]) return false;
+      }
+      return true;
+    });
+  } else {
+    // Show only root items (no folder_path or first level)
+    filteredNotes = notes.filter((n: any) => !n.folder_path || n.folder_path.length === 1);
+  }
+
+  if (search) {
+    filteredNotes = filteredNotes.filter((n) =>
+      n.content.toLowerCase().includes(search.toLowerCase())
+    );
+  }
 
   // Show editor when creating or editing
   if (isCreating || selectedNote) {
@@ -107,6 +147,34 @@ const NotesPanel: React.FC<NotesPanelProps> = ({ onClose }) => {
         </div>
       </div>
 
+      {/* Breadcrumbs */}
+      {breadcrumbs.length > 0 && (
+        <div className="px-4 py-2 border-b border-border">
+          <div className="flex items-center gap-1 text-sm text-muted-foreground overflow-x-auto">
+            <button
+              onClick={() => handleBreadcrumbClick(-1)}
+              className="hover:text-foreground transition-colors shrink-0"
+            >
+              Root
+            </button>
+            {breadcrumbs.map((crumb, idx) => (
+              <React.Fragment key={idx}>
+                <ChevronRight className="h-3 w-3 shrink-0" />
+                <button
+                  onClick={() => handleBreadcrumbClick(idx)}
+                  className={cn(
+                    "hover:text-foreground transition-colors",
+                    idx === breadcrumbs.length - 1 && "text-foreground font-medium"
+                  )}
+                >
+                  {crumb}
+                </button>
+              </React.Fragment>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Notes list */}
       <ScrollArea className="flex-1">
         <div className="p-2 space-y-1">
@@ -119,37 +187,49 @@ const NotesPanel: React.FC<NotesPanelProps> = ({ onClose }) => {
               {search ? "No notes found" : "No notes yet. Create one!"}
             </div>
           ) : (
-            filteredNotes.map((note) => (
-              <button
-                key={note.id}
-                onClick={() => setSelectedNote(note)}
-                className={cn(
-                  "w-full text-left p-3 rounded-lg hover:bg-accent transition-colors group"
-                )}
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
-                      <span className="truncate text-sm font-medium">
-                        {getTitle(note)}
-                      </span>
+            filteredNotes.map((note: any) => {
+              const isFolder = note.is_folder === true;
+              return (
+                <button
+                  key={note.id}
+                  onClick={() => isFolder ? handleFolderClick(note) : setSelectedNote(note)}
+                  className={cn(
+                    "w-full text-left p-3 rounded-lg hover:bg-accent transition-colors group"
+                  )}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        {isFolder ? (
+                          <Folder className="h-4 w-4 text-muted-foreground shrink-0" />
+                        ) : (
+                          <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
+                        )}
+                        <span className="truncate text-sm font-medium">
+                          {getTitle(note)}
+                        </span>
+                        {isFolder && <ChevronRight className="h-4 w-4 text-muted-foreground ml-auto shrink-0" />}
+                      </div>
+                      {note.mime_type && (
+                        <p className="text-xs text-muted-foreground mt-1">
+                          {note.mime_type}
+                        </p>
+                      )}
                     </div>
-                    <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
-                      {note.content}
-                    </p>
+                    {!isFolder && (
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-6 w-6 opacity-0 group-hover:opacity-100 shrink-0"
+                        onClick={(e) => handleDelete(note.id, e)}
+                      >
+                        <Trash2 className="h-3 w-3 text-destructive" />
+                      </Button>
+                    )}
                   </div>
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    className="h-6 w-6 opacity-0 group-hover:opacity-100 shrink-0"
-                    onClick={(e) => handleDelete(note.id, e)}
-                  >
-                    <Trash2 className="h-3 w-3 text-destructive" />
-                  </Button>
-                </div>
-              </button>
-            ))
+                </button>
+              );
+            })
           )}
         </div>
       </ScrollArea>

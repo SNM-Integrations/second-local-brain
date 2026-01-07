@@ -683,9 +683,13 @@ export type Database = {
           category_id: string | null
           content: string
           created_at: string
+          drive_file_id: string | null
+          folder_path: string[] | null
           formatted_content: string | null
           id: string
+          is_folder: boolean | null
           meeting_id: string | null
+          mime_type: string | null
           note_type: Database["public"]["Enums"]["note_type"]
           organization_id: string | null
           parent_note_id: string | null
@@ -699,9 +703,13 @@ export type Database = {
           category_id?: string | null
           content: string
           created_at?: string
+          drive_file_id?: string | null
+          folder_path?: string[] | null
           formatted_content?: string | null
           id?: string
+          is_folder?: boolean | null
           meeting_id?: string | null
+          mime_type?: string | null
           note_type?: Database["public"]["Enums"]["note_type"]
           organization_id?: string | null
           parent_note_id?: string | null
@@ -715,9 +723,13 @@ export type Database = {
           category_id?: string | null
           content?: string
           created_at?: string
+          drive_file_id?: string | null
+          folder_path?: string[] | null
           formatted_content?: string | null
           id?: string
+          is_folder?: boolean | null
           meeting_id?: string | null
+          mime_type?: string | null
           note_type?: Database["public"]["Enums"]["note_type"]
           organization_id?: string | null
           parent_note_id?: string | null

@@ -159,12 +159,8 @@ const GoogleDriveNotesSync: React.FC<GoogleDriveNotesSyncProps> = ({ onSyncCompl
           isFolder: true,
         }));
         
-        // Filter files to only show documents/notes (not all file types)
-        const files = (filesResponse.data?.data || []).filter((f: any) => 
-          f.mimeType?.includes("document") || 
-          f.mimeType?.includes("text") ||
-          f.mimeType === "application/vnd.google-apps.document"
-        ).map((f: any) => ({
+        // Show ALL file types (no filtering)
+        const files = (filesResponse.data?.data || []).map((f: any) => ({
           ...f,
           isFolder: false,
         }));
@@ -244,70 +240,115 @@ const GoogleDriveNotesSync: React.FC<GoogleDriveNotesSyncProps> = ({ onSyncCompl
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Not authenticated");
 
-      // Get files from Drive folder (pass driveId for shared drives)
-      const { data: filesData, error: filesError } = await supabase.functions.invoke("google-drive", {
-        body: { 
-          action: "list-files", 
-          folderId: linkedFolder.id,
-          driveId: linkedFolder.driveId 
-        },
-      });
+      // Recursive function to sync folder contents
+      const syncFolder = async (folderId: string | null, driveId: string | null, path: string[] = []) => {
+        // Get folders and files
+        const [foldersResponse, filesResponse] = await Promise.all([
+          supabase.functions.invoke("google-drive", {
+            body: { action: "list-folders", parentId: folderId, driveId },
+          }),
+          supabase.functions.invoke("google-drive", {
+            body: { action: "list-files", folderId: folderId, driveId },
+          }),
+        ]);
 
-      if (filesError) throw filesError;
-      
-      if (filesData?.needsAuth) {
-        setHasGoogleAuth(false);
-        toast.error("Please reconnect Google Drive");
-        return;
-      }
-
-      const files = filesData?.data || [];
-      let synced = 0;
-
-      for (const file of files) {
-        // Only sync Google Docs and text files
-        if (!file.mimeType.includes("document") && !file.mimeType.includes("text")) {
-          continue;
+        if (foldersResponse.error || filesResponse.error) {
+          console.error("Error fetching items:", foldersResponse.error || filesResponse.error);
+          return 0;
         }
 
-        // Download file content
-        const { data: downloadData, error: downloadError } = await supabase.functions.invoke("google-drive", {
-          body: { action: "download", fileId: file.id, mimeType: file.mimeType },
-        });
+        const folders = foldersResponse.data?.data || [];
+        const files = filesResponse.data?.data || [];
+        let count = 0;
 
-        if (downloadError) {
-          console.error(`Failed to download ${file.name}:`, downloadError);
-          continue;
-        }
-
-        const content = `# ${file.name}\n\n${downloadData?.data?.content || ""}`;
-
-        // Check if note already exists (by searching for title in first line)
-        const { data: existingNotes } = await supabase
-          .from("notes")
-          .select("id, content")
-          .eq("user_id", user.id)
-          .ilike("content", `# ${file.name}%`);
-
-        if (existingNotes && existingNotes.length > 0) {
-          // Update existing note
-          await supabase
+        // Sync folders
+        for (const folder of folders) {
+          const folderPath = [...path, folder.name];
+          
+          // Check if folder note exists
+          const { data: existingFolder } = await supabase
             .from("notes")
-            .update({ content, updated_at: new Date().toISOString() })
-            .eq("id", existingNotes[0].id);
-        } else {
-          // Create new note
-          await supabase.from("notes").insert({
-            user_id: user.id,
-            content,
-            visibility: "personal",
-          });
+            .select("id")
+            .eq("user_id", user.id)
+            .eq("drive_file_id", folder.id)
+            .eq("is_folder", true)
+            .maybeSingle();
+
+          if (!existingFolder) {
+            // Create folder note
+            await supabase.from("notes").insert({
+              user_id: user.id,
+              content: `📁 ${folder.name}`,
+              drive_file_id: folder.id,
+              mime_type: folder.mimeType,
+              is_folder: true,
+              folder_path: folderPath,
+              visibility: "personal",
+            });
+            count++;
+          }
+
+          // Recursively sync subfolder
+          count += await syncFolder(folder.id, driveId, folderPath);
         }
 
-        synced++;
-      }
+        // Sync files
+        for (const file of files) {
+          const filePath = [...path, file.name];
 
-      toast.success(`Synced ${synced} notes from Google Drive`);
+          // Check if file already exists
+          const { data: existingFile } = await supabase
+            .from("notes")
+            .select("id")
+            .eq("user_id", user.id)
+            .eq("drive_file_id", file.id)
+            .maybeSingle();
+
+          // Determine file icon based on mime type
+          let icon = "📄";
+          if (file.mimeType.includes("audio")) icon = "🎵";
+          else if (file.mimeType.includes("video")) icon = "🎬";
+          else if (file.mimeType.includes("image")) icon = "🖼️";
+          else if (file.mimeType.includes("pdf")) icon = "📕";
+          else if (file.mimeType.includes("spreadsheet") || file.mimeType.includes("excel")) icon = "📊";
+          else if (file.mimeType.includes("presentation") || file.mimeType.includes("powerpoint")) icon = "📽️";
+          else if (file.mimeType.includes("document") || file.mimeType.includes("word")) icon = "📝";
+
+          const content = `${icon} ${file.name}`;
+
+          if (existingFile) {
+            // Update existing file note
+            await supabase
+              .from("notes")
+              .update({ 
+                content, 
+                mime_type: file.mimeType,
+                folder_path: filePath,
+                updated_at: new Date().toISOString() 
+              })
+              .eq("id", existingFile.id);
+          } else {
+            // Create new file note
+            await supabase.from("notes").insert({
+              user_id: user.id,
+              content,
+              drive_file_id: file.id,
+              mime_type: file.mimeType,
+              is_folder: false,
+              folder_path: filePath,
+              visibility: "personal",
+            });
+          }
+          count++;
+        }
+
+        return count;
+      };
+
+      // Start recursive sync from linked folder
+      const synced = await syncFolder(linkedFolder.id, linkedFolder.driveId, [linkedFolder.name]);
+
+      toast.success(`Synced ${synced} items from Google Drive`);
       onSyncComplete?.();
     } catch (error: any) {
       toast.error("Sync failed: " + error.message);
