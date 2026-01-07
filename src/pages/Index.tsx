@@ -540,9 +540,9 @@ const Index = () => {
 
             {/* CRM Tab */}
             {activeTab === "crm" && (
-              <div className="flex-1 flex flex-col overflow-hidden">
-                <Tabs value={crmSubTab} onValueChange={(v) => setCrmSubTab(v as any)} className="flex-1 flex flex-col">
-                  <div className="px-4 pt-2">
+              <div className="flex-1 flex flex-col min-h-0">
+                <Tabs value={crmSubTab} onValueChange={(v) => setCrmSubTab(v as any)} className="flex-1 flex flex-col min-h-0">
+                  <div className="px-4 pt-2 shrink-0">
                     <TabsList>
                       <TabsTrigger value="contacts">Contacts</TabsTrigger>
                       <TabsTrigger value="leads">Leads</TabsTrigger>
@@ -550,20 +550,20 @@ const Index = () => {
                       <TabsTrigger value="companies">Companies</TabsTrigger>
                     </TabsList>
                   </div>
-                  <TabsContent value="contacts" className="flex-1 overflow-auto mt-0">
+                  <TabsContent value="contacts" className="flex-1 overflow-auto mt-0 p-4">
                     <ContactsList 
                       onNavigateToCompany={handleNavigateToCompany}
                       selectedContactId={selectedContactId}
                       onContactSelected={setSelectedContactId}
                     />
                   </TabsContent>
-                  <TabsContent value="leads" className="flex-1 overflow-auto mt-0">
+                  <TabsContent value="leads" className="flex-1 overflow-auto mt-0 p-4">
                     <LeadsList />
                   </TabsContent>
-                  <TabsContent value="deals" className="flex-1 overflow-auto mt-0">
+                  <TabsContent value="deals" className="flex-1 overflow-auto mt-0 p-4">
                     <DealsPipeline />
                   </TabsContent>
-                  <TabsContent value="companies" className="flex-1 overflow-auto mt-0">
+                  <TabsContent value="companies" className="flex-1 overflow-auto mt-0 p-4">
                     <CompaniesList 
                       onNavigateToContact={handleNavigateToContact}
                       selectedCompanyId={selectedCompanyId}
