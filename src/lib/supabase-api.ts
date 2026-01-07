@@ -13,6 +13,10 @@ export interface Note {
   content: string;
   formatted_content: string | null;
   category_id: string | null;
+  drive_file_id?: string | null;
+  mime_type?: string | null;
+  is_folder?: boolean;
+  folder_path?: string[] | null;
   created_at: string;
   updated_at: string;
 }
@@ -144,7 +148,7 @@ export interface CalendarEvent {
 export async function fetchNotes(): Promise<Note[]> {
   const { data, error } = await supabase
     .from("notes")
-    .select("id, content, formatted_content, category_id, created_at, updated_at")
+    .select("id, content, formatted_content, category_id, drive_file_id, mime_type, is_folder, folder_path, created_at, updated_at")
     .order("updated_at", { ascending: false });
   
   if (error) {
