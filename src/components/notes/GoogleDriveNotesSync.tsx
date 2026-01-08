@@ -237,118 +237,18 @@ const GoogleDriveNotesSync: React.FC<GoogleDriveNotesSyncProps> = ({ onSyncCompl
 
     setIsSyncing(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error("Not authenticated");
+      // Call batch sync edge function
+      const { data, error } = await supabase.functions.invoke("google-drive-batch-sync", {
+        body: {
+          folderId: linkedFolder.id,
+          driveId: linkedFolder.driveId,
+          folderName: linkedFolder.name,
+        },
+      });
 
-      // Recursive function to sync folder contents
-      const syncFolder = async (folderId: string | null, driveId: string | null, path: string[] = []) => {
-        // Get folders and files
-        const [foldersResponse, filesResponse] = await Promise.all([
-          supabase.functions.invoke("google-drive", {
-            body: { action: "list-folders", parentId: folderId, driveId },
-          }),
-          supabase.functions.invoke("google-drive", {
-            body: { action: "list-files", folderId: folderId, driveId },
-          }),
-        ]);
+      if (error) throw error;
 
-        if (foldersResponse.error || filesResponse.error) {
-          console.error("Error fetching items:", foldersResponse.error || filesResponse.error);
-          return 0;
-        }
-
-        const folders = foldersResponse.data?.data || [];
-        const files = filesResponse.data?.data || [];
-        let count = 0;
-
-        // Sync folders
-        for (const folder of folders) {
-          const folderPath = [...path, folder.name];
-          
-          // Check if folder note exists
-          const { data: existingFolder } = await supabase
-            .from("notes")
-            .select("id")
-            .eq("user_id", user.id)
-            .eq("drive_file_id", folder.id)
-            .eq("is_folder", true)
-            .maybeSingle();
-
-          if (!existingFolder) {
-            // Create folder note
-            await supabase.from("notes").insert({
-              user_id: user.id,
-              content: `📁 ${folder.name}`,
-              drive_file_id: folder.id,
-              mime_type: folder.mimeType,
-              is_folder: true,
-              folder_path: folderPath,
-              visibility: "personal",
-            });
-            count++;
-          }
-
-          // Recursively sync subfolder
-          count += await syncFolder(folder.id, driveId, folderPath);
-        }
-
-        // Sync files
-        for (const file of files) {
-          const filePath = [...path, file.name];
-
-          // Check if file already exists
-          const { data: existingFile } = await supabase
-            .from("notes")
-            .select("id")
-            .eq("user_id", user.id)
-            .eq("drive_file_id", file.id)
-            .maybeSingle();
-
-          // Determine file icon based on mime type
-          let icon = "📄";
-          if (file.mimeType.includes("audio")) icon = "🎵";
-          else if (file.mimeType.includes("video")) icon = "🎬";
-          else if (file.mimeType.includes("image")) icon = "🖼️";
-          else if (file.mimeType.includes("pdf")) icon = "📕";
-          else if (file.mimeType.includes("spreadsheet") || file.mimeType.includes("excel")) icon = "📊";
-          else if (file.mimeType.includes("presentation") || file.mimeType.includes("powerpoint")) icon = "📽️";
-          else if (file.mimeType.includes("document") || file.mimeType.includes("word")) icon = "📝";
-
-          const content = `${icon} ${file.name}`;
-
-          if (existingFile) {
-            // Update existing file note
-            await supabase
-              .from("notes")
-              .update({ 
-                content, 
-                mime_type: file.mimeType,
-                folder_path: filePath,
-                updated_at: new Date().toISOString() 
-              })
-              .eq("id", existingFile.id);
-          } else {
-            // Create new file note
-            await supabase.from("notes").insert({
-              user_id: user.id,
-              content,
-              drive_file_id: file.id,
-              mime_type: file.mimeType,
-              is_folder: false,
-              folder_path: filePath,
-              visibility: "personal",
-            });
-          }
-          count++;
-        }
-
-        return count;
-      };
-
-      // Start recursive sync from linked folder
-      const synced = await syncFolder(linkedFolder.id, linkedFolder.driveId, [linkedFolder.name]);
-
-      toast.success(`Synced ${synced} items from Google Drive`);
+      toast.success(`Synced ${data?.synced || 0} items from Google Drive`);
       onSyncComplete?.();
     } catch (error: any) {
       toast.error("Sync failed: " + error.message);
