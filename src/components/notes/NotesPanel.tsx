@@ -82,20 +82,28 @@ const NotesPanel: React.FC<NotesPanelProps> = ({ onClose }) => {
   let filteredNotes = notes;
   
   if (folderFilter) {
-    // Show items in current folder
+    // Show items that are direct children of the current folder
     filteredNotes = notes.filter((n: any) => {
       if (!n.folder_path) return false;
-      // Check if this item is in the current folder
+      // Item must be exactly one level deeper than current folder
       if (n.folder_path.length !== folderFilter.length + 1) return false;
-      // Check if path matches
+      // Check if path matches up to the filter depth
       for (let i = 0; i < folderFilter.length; i++) {
         if (n.folder_path[i] !== folderFilter[i]) return false;
       }
       return true;
     });
   } else {
-    // Show only root items (no folder_path or first level)
-    filteredNotes = notes.filter((n: any) => !n.folder_path || n.folder_path.length === 1);
+    // At root: show local notes (no folder_path) AND top-level synced items
+    // Top-level synced items have folder_path.length === 1 (just the root folder name)
+    // Also show local notes that don't have folder_path
+    filteredNotes = notes.filter((n: any) => {
+      // Local notes without folder_path
+      if (!n.folder_path || n.folder_path.length === 0) return true;
+      // Top-level synced folders/files (only the linked folder name in path)
+      if (n.folder_path.length === 1) return true;
+      return false;
+    });
   }
 
   if (search) {
