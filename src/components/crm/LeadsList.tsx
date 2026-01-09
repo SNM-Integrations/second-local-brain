@@ -17,7 +17,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Plus, Search, MoreHorizontal, Mail, Phone, Edit, Trash2, UserCheck } from "lucide-react";
+import { Plus, Search, MoreHorizontal, Mail, Phone, Edit, Trash2, UserCheck, PhoneCall, PhoneOff, PhoneIncoming } from "lucide-react";
 import { LeadDialog } from "./LeadDialog";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -32,6 +32,9 @@ export interface Lead {
   status: "new" | "contacted" | "qualified" | "proposal" | "won" | "lost";
   lastContact: string;
   assigned_to: string | null;
+  call_status: string | null;
+  last_call_duration: number | null;
+  last_call_at: string | null;
 }
 
 const statusColors: Record<Lead["status"], string> = {
@@ -42,6 +45,57 @@ const statusColors: Record<Lead["status"], string> = {
   won: "bg-emerald-500/10 text-emerald-500 border-emerald-500/20",
   lost: "bg-destructive/10 text-destructive border-destructive/20",
 };
+
+// Helper to format call duration
+function formatDuration(seconds: number): string {
+  if (seconds < 60) return `${seconds}s`;
+  const mins = Math.floor(seconds / 60);
+  const secs = seconds % 60;
+  if (mins < 60) return secs > 0 ? `${mins}m ${secs}s` : `${mins}m`;
+  const hours = Math.floor(mins / 60);
+  const remainingMins = mins % 60;
+  return `${hours}h ${remainingMins}m`;
+}
+
+// Call status badge component
+function CallStatusBadge({ 
+  callStatus, 
+  lastCallDuration, 
+  lastCallAt 
+}: { 
+  callStatus: string | null; 
+  lastCallDuration: number | null;
+  lastCallAt: string | null;
+}) {
+  if (!callStatus) return <span className="text-muted-foreground text-sm">—</span>;
+  
+  switch (callStatus) {
+    case 'ringing':
+      return (
+        <Badge variant="outline" className="bg-amber-500/10 text-amber-500 border-amber-500/20 gap-1 animate-pulse">
+          <PhoneIncoming className="h-3 w-3" />
+          Ringing
+        </Badge>
+      );
+    case 'in_call':
+      return (
+        <Badge variant="outline" className="bg-emerald-500/10 text-emerald-500 border-emerald-500/20 gap-1">
+          <PhoneCall className="h-3 w-3" />
+          In Call
+        </Badge>
+      );
+    case 'call_done':
+      const durationText = lastCallDuration ? formatDuration(lastCallDuration) : '';
+      return (
+        <Badge variant="outline" className="bg-blue-500/10 text-blue-500 border-blue-500/20 gap-1">
+          <PhoneOff className="h-3 w-3" />
+          {durationText ? `Done (${durationText})` : 'Call Done'}
+        </Badge>
+      );
+    default:
+      return <span className="text-muted-foreground text-sm">{callStatus}</span>;
+  }
+}
 
 export function LeadsList() {
   const { context } = useOrganization();
@@ -73,7 +127,7 @@ export function LeadsList() {
       setLeads([]);
     } else {
       setLeads(
-        (data || []).map((c) => {
+        (data || []).map((c: any) => {
           let status: Lead["status"] = "new";
           if (c.tags?.includes("won")) status = "won";
           else if (c.tags?.includes("lost")) status = "lost";
@@ -90,6 +144,9 @@ export function LeadsList() {
             status,
             lastContact: new Date(c.updated_at).toLocaleDateString(),
             assigned_to: c.assigned_to,
+            call_status: c.call_status,
+            last_call_duration: c.last_call_duration,
+            last_call_at: c.last_call_at,
           };
         })
       );
@@ -181,6 +238,7 @@ export function LeadsList() {
             <TableRow className="hover:bg-transparent">
               <TableHead>Lead</TableHead>
               <TableHead>Company</TableHead>
+              <TableHead>Call Status</TableHead>
               <TableHead>Status</TableHead>
               <TableHead>Last Contact</TableHead>
               <TableHead className="w-[50px]"></TableHead>
@@ -189,7 +247,7 @@ export function LeadsList() {
           <TableBody>
             {filteredLeads.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
+                <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
                   {search ? "No leads found" : "No leads yet. Add one!"}
                 </TableCell>
               </TableRow>
@@ -217,6 +275,13 @@ export function LeadsList() {
                     </div>
                   </TableCell>
                   <TableCell className="text-muted-foreground">{lead.company}</TableCell>
+                  <TableCell>
+                    <CallStatusBadge 
+                      callStatus={lead.call_status} 
+                      lastCallDuration={lead.last_call_duration}
+                      lastCallAt={lead.last_call_at}
+                    />
+                  </TableCell>
                   <TableCell>
                     <Badge variant="outline" className={statusColors[lead.status]}>
                       {lead.status.charAt(0).toUpperCase() + lead.status.slice(1)}
