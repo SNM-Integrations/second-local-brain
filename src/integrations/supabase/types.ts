@@ -211,6 +211,8 @@ export type Database = {
         Row: {
           address: string | null
           assigned_to: string | null
+          call_started_at: string | null
+          call_status: string | null
           city: string | null
           company: string | null
           company_id: string | null
@@ -221,6 +223,8 @@ export type Database = {
           estimated_hours: number | null
           id: string
           job_description: string | null
+          last_call_at: string | null
+          last_call_duration: number | null
           name: string
           notes: string | null
           organization_id: string | null
@@ -240,6 +244,8 @@ export type Database = {
         Insert: {
           address?: string | null
           assigned_to?: string | null
+          call_started_at?: string | null
+          call_status?: string | null
           city?: string | null
           company?: string | null
           company_id?: string | null
@@ -250,6 +256,8 @@ export type Database = {
           estimated_hours?: number | null
           id?: string
           job_description?: string | null
+          last_call_at?: string | null
+          last_call_duration?: number | null
           name: string
           notes?: string | null
           organization_id?: string | null
@@ -269,6 +277,8 @@ export type Database = {
         Update: {
           address?: string | null
           assigned_to?: string | null
+          call_started_at?: string | null
+          call_status?: string | null
           city?: string | null
           company?: string | null
           company_id?: string | null
@@ -279,6 +289,8 @@ export type Database = {
           estimated_hours?: number | null
           id?: string
           job_description?: string | null
+          last_call_at?: string | null
+          last_call_duration?: number | null
           name?: string
           notes?: string | null
           organization_id?: string | null
