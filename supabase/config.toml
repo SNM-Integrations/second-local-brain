@@ -24,5 +24,11 @@ verify_jwt = false
 [functions.crm-webhook]
 verify_jwt = false
 
+[functions.task-webhook]
+verify_jwt = false
+
+[functions.pbx-webhook]
+verify_jwt = false
+
 [functions.seventime-sync]
 verify_jwt = true
