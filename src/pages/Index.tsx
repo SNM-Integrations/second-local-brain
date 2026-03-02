@@ -45,6 +45,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { OrganizationSwitcher } from "@/components/organization/OrganizationSwitcher";
 import { PendingInvitations } from "@/components/organization/PendingInvitations";
+import { VoiceRecordButton } from "@/components/voice/VoiceRecordButton";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 interface Message {
   id: string;
@@ -53,16 +55,17 @@ interface Message {
   timestamp: Date;
 }
 
-type MainTab = "chat" | "calendar" | "crm" | "tasks" | "notes" | "search" | "projects";
+type MainTab = "voice" | "chat" | "calendar" | "crm" | "tasks" | "notes" | "search" | "projects";
 
 const Index = () => {
+  const isMobile = useIsMobile();
   const { user, loading: authLoading, signOut } = useAuth();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [conversations, setConversations] = useState<Conversation[]>([]);
-  const [activeTab, setActiveTab] = useState<MainTab>("chat");
+  const [activeTab, setActiveTab] = useState<MainTab>(isMobile ? "voice" : "chat");
   const [chatPanelOpen, setChatPanelOpen] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [crmSubTab, setCrmSubTab] = useState<"contacts" | "leads" | "deals" | "companies">("contacts");
@@ -86,19 +89,20 @@ const Index = () => {
     setConversations(data);
   };
 
-  const handleSend = async () => {
-    if (!input.trim() || isLoading) return;
+  const handleSend = async (overrideText?: string) => {
+    const text = overrideText || input.trim();
+    if (!text || isLoading) return;
 
     const userMessage: Message = {
       id: crypto.randomUUID(),
       role: "user",
-      content: input.trim(),
+      content: text,
       timestamp: new Date(),
     };
 
     setMessages((prev) => [...prev, userMessage]);
-    const userInput = input.trim();
-    setInput("");
+    const userInput = text;
+    if (!overrideText) setInput("");
     setIsLoading(true);
 
     try {
@@ -214,6 +218,13 @@ const Index = () => {
     setActiveTab(tab);
   };
 
+  // Voice transcript handler - sends transcript directly as a chat message
+  const handleVoiceTranscript = async (text: string) => {
+    setActiveTab("chat");
+    // Directly send via the chat pipeline
+    await handleSend(text);
+  };
+
   // CRM navigation handlers
   const handleNavigateToCompany = (companyId: string) => {
     setSelectedCompanyId(companyId);
@@ -245,6 +256,15 @@ const Index = () => {
     <div className="flex h-screen bg-background">
       {/* Left Navigation Bar */}
       <div className="w-16 border-r border-border bg-card/50 flex flex-col items-center py-4 gap-2">
+        <Button
+          variant={activeTab === "voice" ? "secondary" : "ghost"}
+          size="icon"
+          onClick={() => handleTabChange("voice")}
+          className="h-12 w-12"
+          title="Voice"
+        >
+          <Mic className="h-5 w-5" />
+        </Button>
         <Button
           variant={activeTab === "chat" ? "secondary" : "ghost"}
           size="icon"
@@ -378,6 +398,17 @@ const Index = () => {
             "flex-1 flex flex-col overflow-hidden transition-all duration-300",
             showChatAsSidePanel && "mr-0"
           )}>
+            {/* Voice Tab */}
+            {activeTab === "voice" && (
+              <div className="flex-1 flex items-center justify-center">
+                <VoiceRecordButton
+                  onTranscript={handleVoiceTranscript}
+                  isProcessing={isLoading}
+                  className="w-full max-w-md"
+                />
+              </div>
+            )}
+
             {/* Chat Tab */}
             {activeTab === "chat" && (
               <div className="flex flex-1 overflow-hidden">
@@ -516,7 +547,7 @@ const Index = () => {
                       <div className="flex flex-col gap-2">
                         <Button
                           size="icon"
-                          onClick={handleSend}
+                          onClick={() => handleSend()}
                           disabled={!input.trim() || isLoading}
                         >
                           <Send className="h-4 w-4" />
@@ -673,7 +704,7 @@ const Index = () => {
                   />
                   <Button
                     size="icon"
-                    onClick={handleSend}
+                    onClick={() => handleSend()}
                     disabled={!input.trim() || isLoading}
                     className="shrink-0"
                   >
