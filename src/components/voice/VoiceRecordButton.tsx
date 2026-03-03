@@ -2,6 +2,12 @@ import React, { useState, useRef, useCallback, useEffect } from "react";
 import { Mic, MicOff, Loader2, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import {
+  startNativeSpeechRecognition,
+  keepAwake,
+  allowSleep,
+  hapticFeedback,
+} from "@/lib/native-plugins";
 
 interface VoiceRecordButtonProps {
   onTranscript: (text: string) => void;
@@ -11,96 +17,77 @@ interface VoiceRecordButtonProps {
 
 export function VoiceRecordButton({ onTranscript, isProcessing = false, className }: VoiceRecordButtonProps) {
   const [isRecording, setIsRecording] = useState(false);
-  const [transcript, setTranscript] = useState("");
-  const [interimTranscript, setInterimTranscript] = useState("");
-  const recognitionRef = useRef<any>(null);
+  const [displayText, setDisplayText] = useState("");
+  const [finalText, setFinalText] = useState("");
+  const stopRef = useRef<(() => Promise<string>) | null>(null);
   const [supported, setSupported] = useState(true);
 
   useEffect(() => {
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SpeechRecognition) {
-      setSupported(false);
-    }
+    import("@capacitor/core").then(({ Capacitor }) => {
+      if (!SpeechRecognition && !Capacitor.isNativePlatform()) {
+        setSupported(false);
+      }
+    });
   }, []);
 
-  const startRecording = useCallback(() => {
-    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SpeechRecognition) return;
+  const startRecording = useCallback(async () => {
+    hapticFeedback();
+    await keepAwake();
 
-    const recognition = new SpeechRecognition();
-    recognition.continuous = true;
-    recognition.interimResults = true;
-    recognition.lang = "sv-SE"; // Swedish default, could be made configurable
-
-    let finalTranscript = "";
-
-    recognition.onresult = (event: any) => {
-      let interim = "";
-      for (let i = event.resultIndex; i < event.results.length; i++) {
-        const result = event.results[i];
-        if (result.isFinal) {
-          finalTranscript += result[0].transcript + " ";
-        } else {
-          interim += result[0].transcript;
-        }
-      }
-      setTranscript(finalTranscript.trim());
-      setInterimTranscript(interim);
-    };
-
-    recognition.onerror = (event: any) => {
-      console.error("Speech recognition error:", event.error);
-      if (event.error !== "no-speech") {
-        setIsRecording(false);
-      }
-    };
-
-    recognition.onend = () => {
-      // Auto-restart if still in recording mode (handles timeout restarts)
-      if (recognitionRef.current === recognition) {
-        try {
-          recognition.start();
-        } catch {
-          setIsRecording(false);
-        }
-      }
-    };
-
-    recognitionRef.current = recognition;
-    recognition.start();
     setIsRecording(true);
-    setTranscript("");
-    setInterimTranscript("");
+    setDisplayText("");
+    setFinalText("");
+
+    const session = await startNativeSpeechRecognition({
+      language: "sv-SE",
+      onPartialResult: (text) => {
+        setDisplayText(text);
+      },
+      onResult: (text) => {
+        setFinalText(text);
+        setDisplayText(text);
+      },
+      onError: (error) => {
+        console.error("Speech recognition error:", error);
+        if (error !== "no-speech") {
+          setIsRecording(false);
+          allowSleep();
+        }
+      },
+    });
+
+    stopRef.current = session.stop;
   }, []);
 
-  const stopRecording = useCallback(() => {
-    const recognition = recognitionRef.current;
-    recognitionRef.current = null;
-    if (recognition) {
-      recognition.onend = null;
-      recognition.stop();
+  const stopRecording = useCallback(async () => {
+    hapticFeedback();
+    if (stopRef.current) {
+      const result = await stopRef.current();
+      stopRef.current = null;
+      setFinalText(result);
+      setDisplayText(result);
     }
     setIsRecording(false);
-    setInterimTranscript("");
+    await allowSleep();
   }, []);
 
   const handleSend = useCallback(() => {
-    if (transcript.trim()) {
-      onTranscript(transcript.trim());
-      setTranscript("");
-      setInterimTranscript("");
+    const text = finalText.trim();
+    if (text) {
+      onTranscript(text);
+      setFinalText("");
+      setDisplayText("");
     }
-  }, [transcript, onTranscript]);
+  }, [finalText, onTranscript]);
 
-  const toggleRecording = useCallback(() => {
+  const toggleRecording = useCallback(async () => {
     if (isRecording) {
-      stopRecording();
+      await stopRecording();
     } else {
-      startRecording();
+      await startRecording();
     }
   }, [isRecording, startRecording, stopRecording]);
-
-  const displayText = transcript + (interimTranscript ? ` ${interimTranscript}` : "");
 
   if (!supported) {
     return (
@@ -118,12 +105,7 @@ export function VoiceRecordButton({ onTranscript, isProcessing = false, classNam
       {/* Transcript display */}
       {displayText && (
         <div className="w-full max-w-md bg-muted/50 rounded-2xl p-4 min-h-[80px] max-h-[200px] overflow-y-auto">
-          <p className="text-sm whitespace-pre-wrap">
-            {transcript}
-            {interimTranscript && (
-              <span className="text-muted-foreground">{interimTranscript}</span>
-            )}
-          </p>
+          <p className="text-sm whitespace-pre-wrap">{displayText}</p>
         </div>
       )}
 
@@ -160,8 +142,8 @@ export function VoiceRecordButton({ onTranscript, isProcessing = false, classNam
           : "Tryck för att prata"}
       </p>
 
-      {/* Send button - visible when there's a transcript and not recording */}
-      {transcript.trim() && !isRecording && (
+      {/* Send button */}
+      {finalText.trim() && !isRecording && (
         <Button
           onClick={handleSend}
           disabled={isProcessing}

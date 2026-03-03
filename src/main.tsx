@@ -2,6 +2,10 @@ import React from "react";
 import { createRoot } from "react-dom/client";
 import App from "./App.tsx";
 import "./index.css";
+import { initializeAppPermissions } from "./lib/notification-setup";
+
+// Initialize native permissions (notifications, etc.)
+initializeAppPermissions();
 
 // Force env reload - build timestamp: 2025-12-08
 
